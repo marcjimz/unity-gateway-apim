@@ -1,0 +1,8 @@
+# Copy to sandbox.tfvars and fill in. `make up` uses infra/sandbox.tfvars by default.
+subscription_id       = "00000000-0000-0000-0000-000000000000"
+tenant_id             = "00000000-0000-0000-0000-000000000000"
+databricks_account_id = "00000000-0000-0000-0000-000000000000"
+metastore_id          = "00000000-0000-0000-0000-000000000000" # existing UC metastore in `location`
+location              = "centralus"
+apim_publisher_email  = "you@example.com"
+grant_admin_consent   = false # true only if an Entra admin runs Terraform

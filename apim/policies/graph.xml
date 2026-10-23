@@ -1,0 +1,44 @@
+<!-- Flow #1 backend: Graph REST operations called as the user. Reached via the graph-mcp MCP server.
+     Validates the user's gateway token, exchanges it (OBO) for a Graph token for the same user. -->
+<policies>
+    <inbound>
+        <base />
+        <include-fragment fragment-id="validate-user" />
+        <set-variable name="obo-scope" value="https://graph.microsoft.com/.default" />
+        <include-fragment fragment-id="obo-exchange" />
+        <include-fragment fragment-id="log-claims" />
+        <choose>
+            <when condition="@(context.Operation.Id == "get_my_profile")">
+                <set-query-parameter name="$select" exists-action="override">
+                    <value>id,displayName,userPrincipalName,mail,jobTitle,department</value>
+                </set-query-parameter>
+            </when>
+            <when condition="@(context.Operation.Id == "list_my_groups")">
+                <set-query-parameter name="$select" exists-action="override">
+                    <value>id,displayName</value>
+                </set-query-parameter>
+            </when>
+            <when condition="@(context.Operation.Id == "find_user")">
+                <rewrite-uri template="/users" copy-unmatched-params="false" />
+                <set-query-parameter name="$filter" exists-action="override">
+                    <value>@("startswith(displayName,'" + context.Request.MatchedParameters["name"].Replace("'", "''") + "')")</value>
+                </set-query-parameter>
+                <set-query-parameter name="$select" exists-action="override">
+                    <value>id,displayName,mail,jobTitle</value>
+                </set-query-parameter>
+                <set-query-parameter name="$top" exists-action="override">
+                    <value>10</value>
+                </set-query-parameter>
+            </when>
+        </choose>
+    </inbound>
+    <backend>
+        <base />
+    </backend>
+    <outbound>
+        <base />
+    </outbound>
+    <on-error>
+        <base />
+    </on-error>
+</policies>

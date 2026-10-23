@@ -1,0 +1,25 @@
+<!-- Emit the identity at this hop to Application Insights (claims only, never tokens).
+     Query: traces | where message has "identity-hop" -->
+<fragment>
+    <trace source="identity-hop" severity="information">
+        <message>@{
+            var caller = (Jwt)context.Variables["caller-jwt"];
+            var hop = new JObject(
+                new JProperty("api", context.Api.Name),
+                new JProperty("operation", context.Operation.Id),
+                new JProperty("caller_oid", caller.Claims.GetValueOrDefault("oid", "")),
+                new JProperty("caller_upn", caller.Claims.GetValueOrDefault("upn", caller.Claims.GetValueOrDefault("email", caller.Claims.GetValueOrDefault("preferred_username", "")))),
+                new JProperty("caller_appid", caller.Claims.GetValueOrDefault("azp", caller.Claims.GetValueOrDefault("appid", ""))),
+                new JProperty("caller_idtyp", caller.Claims.GetValueOrDefault("idtyp", "user")),
+                new JProperty("caller_aud", string.Join(",", caller.Audiences)));
+            if (context.Variables.ContainsKey("obo-token")) {
+                var obo = ((string)context.Variables["obo-token"]).AsJwt();
+                if (obo != null) {
+                    hop.Add(new JProperty("downstream_oid", obo.Claims.GetValueOrDefault("oid", "")));
+                    hop.Add(new JProperty("downstream_aud", string.Join(",", obo.Audiences)));
+                }
+            }
+            return "identity-hop " + hop.ToString(Newtonsoft.Json.Formatting.None);
+        }</message>
+    </trace>
+</fragment>

@@ -1,0 +1,16 @@
+<!-- Accept only Entra user tokens issued for the gateway API with a gateway scope.
+     Sets context.Variables["caller-jwt"] for downstream fragments. -->
+<fragment>
+    <validate-azure-ad-token tenant-id="{{tenant-id}}" header-name="Authorization" failed-validation-httpcode="401" failed-validation-error-message="Unauthorized: a user token for the gateway API is required" output-token-variable-name="caller-jwt">
+        <audiences>
+            <audience>{{gateway-app-id}}</audience>
+            <audience>{{gateway-uri}}</audience>
+        </audiences>
+        <required-claims>
+            <claim name="scp" match="any" separator=" ">
+                <value>mcp.invoke</value>
+                <value>models.invoke</value>
+            </claim>
+        </required-claims>
+    </validate-azure-ad-token>
+</fragment>

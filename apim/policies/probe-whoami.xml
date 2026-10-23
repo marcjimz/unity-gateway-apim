@@ -1,0 +1,32 @@
+<!-- Feasibility probe: who does APIM think the caller is? -->
+<policies>
+    <inbound>
+        <base />
+        <include-fragment fragment-id="validate-user" />
+        <include-fragment fragment-id="log-claims" />
+        <return-response>
+            <set-status code="200" reason="OK" />
+            <set-header name="Content-Type" exists-action="override">
+                <value>application/json</value>
+            </set-header>
+            <set-body>@{
+                var jwt = (Jwt)context.Variables["caller-jwt"];
+                var result = new JObject();
+                foreach (var name in new[] { "oid", "tid", "upn", "preferred_username", "email", "name", "scp", "azp", "idtyp", "ver" }) {
+                    result[name] = jwt.Claims.GetValueOrDefault(name, "");
+                }
+                result["aud"] = string.Join(",", jwt.Audiences);
+                return result.ToString();
+            }</set-body>
+        </return-response>
+    </inbound>
+    <backend>
+        <base />
+    </backend>
+    <outbound>
+        <base />
+    </outbound>
+    <on-error>
+        <base />
+    </on-error>
+</policies>

@@ -1,0 +1,13 @@
+<!-- Flow #2: accept only the Foundry project managed identity, with a token issued for Azure Databricks.
+     The same token is forwarded to Databricks, where the identity is a service principal with CAN_QUERY. -->
+<fragment>
+    <validate-azure-ad-token tenant-id="{{tenant-id}}" header-name="Authorization" failed-validation-httpcode="401" failed-validation-error-message="Unauthorized: only the Foundry project identity may call this API" output-token-variable-name="caller-jwt">
+        <client-application-ids>
+            <application-id>{{foundry-mi-app-id}}</application-id>
+        </client-application-ids>
+        <audiences>
+            <audience>{{databricks-app-id}}</audience>
+            <audience>https://azuredatabricks.net</audience>
+        </audiences>
+    </validate-azure-ad-token>
+</fragment>

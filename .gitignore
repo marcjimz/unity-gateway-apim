@@ -1,0 +1,21 @@
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tfvars
+!*.tfvars.example
+crash.log
+
+# Python
+__pycache__/
+.venv/
+.pytest_cache/
+*.egg-info/
+
+# Local
+.env
+.out/
+.isaac/
+MEMORY.md
+.DS_Store

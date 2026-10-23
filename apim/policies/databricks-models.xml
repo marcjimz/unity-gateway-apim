@@ -1,0 +1,21 @@
+<!-- Flow #2: Foundry agent (project managed identity) -> Databricks Foundation Model APIs.
+     The caller's Entra token (audience Azure Databricks) is forwarded unchanged, so Databricks
+     sees the Foundry project identity and enforces its CAN_QUERY grant. -->
+<policies>
+    <inbound>
+        <base />
+        <include-fragment fragment-id="validate-foundry-mi" />
+        <include-fragment fragment-id="log-claims" />
+        <!-- Foundry may append api-version; Databricks does not use it. -->
+        <set-query-parameter name="api-version" exists-action="delete" />
+    </inbound>
+    <backend>
+        <forward-request buffer-response="false" />
+    </backend>
+    <outbound>
+        <base />
+    </outbound>
+    <on-error>
+        <base />
+    </on-error>
+</policies>

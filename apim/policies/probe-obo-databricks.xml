@@ -1,0 +1,45 @@
+<!-- Feasibility probe: OBO to Azure Databricks, then ask Databricks who we are. -->
+<policies>
+    <inbound>
+        <base />
+        <include-fragment fragment-id="validate-user" />
+        <set-variable name="obo-scope" value="{{databricks-app-id}}/.default" />
+        <include-fragment fragment-id="obo-exchange" />
+        <include-fragment fragment-id="log-claims" />
+        <send-request mode="new" response-variable-name="me" timeout="20" ignore-error="false">
+            <set-url>https://{{databricks-host}}/api/2.0/preview/scim/v2/Me</set-url>
+            <set-method>GET</set-method>
+            <set-header name="Authorization" exists-action="override">
+                <value>@("Bearer " + (string)context.Variables["obo-token"])</value>
+            </set-header>
+        </send-request>
+        <return-response>
+            <set-status code="200" reason="OK" />
+            <set-header name="Content-Type" exists-action="override">
+                <value>application/json</value>
+            </set-header>
+            <set-body>@{
+                var caller = (Jwt)context.Variables["caller-jwt"];
+                var obo = ((string)context.Variables["obo-token"]).AsJwt();
+                var me = (IResponse)context.Variables["me"];
+                var body = me.Body.As<JObject>();
+                return new JObject(
+                    new JProperty("caller_oid", caller.Claims.GetValueOrDefault("oid", "")),
+                    new JProperty("obo_oid", obo.Claims.GetValueOrDefault("oid", "")),
+                    new JProperty("obo_aud", string.Join(",", obo.Audiences)),
+                    new JProperty("obo_scp", obo.Claims.GetValueOrDefault("scp", "")),
+                    new JProperty("databricks_status", me.StatusCode),
+                    new JProperty("databricks_user", body["userName"] ?? body["message"])).ToString();
+            }</set-body>
+        </return-response>
+    </inbound>
+    <backend>
+        <base />
+    </backend>
+    <outbound>
+        <base />
+    </outbound>
+    <on-error>
+        <base />
+    </on-error>
+</policies>

@@ -1,0 +1,47 @@
+<!-- Entra On-Behalf-Of: exchange the caller's gateway token for a token to context.Variables["obo-scope"].
+     The gateway app authenticates with APIM's managed identity as a federated credential (no secret).
+     Sets context.Variables["obo-token"] and replaces the Authorization header. -->
+<fragment>
+    <set-variable name="obo-cache-key" value="@("obo:" + ((Jwt)context.Variables["caller-jwt"]).Claims.GetValueOrDefault("oid", "") + ":" + (string)context.Variables["obo-scope"])" />
+    <cache-lookup-value key="@((string)context.Variables["obo-cache-key"])" variable-name="obo-token" />
+    <choose>
+        <when condition="@(!context.Variables.ContainsKey("obo-token"))">
+            <authentication-managed-identity resource="api://AzureADTokenExchange" output-token-variable-name="mi-assertion" ignore-error="false" />
+            <send-request mode="new" response-variable-name="obo-response" timeout="20" ignore-error="false">
+                <set-url>https://login.microsoftonline.com/{{tenant-id}}/oauth2/v2.0/token</set-url>
+                <set-method>POST</set-method>
+                <set-header name="Content-Type" exists-action="override">
+                    <value>application/x-www-form-urlencoded</value>
+                </set-header>
+                <set-body>@{
+                    var assertion = context.Request.Headers.GetValueOrDefault("Authorization", "").Replace("Bearer ", "");
+                    return "grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer"
+                        + "&requested_token_use=on_behalf_of"
+                        + "&client_id={{gateway-app-id}}"
+                        + "&client_assertion_type=urn%3Aietf%3Aparams%3Aoauth%3Aclient-assertion-type%3Ajwt-bearer"
+                        + "&client_assertion=" + (string)context.Variables["mi-assertion"]
+                        + "&assertion=" + assertion
+                        + "&scope=" + System.Net.WebUtility.UrlEncode((string)context.Variables["obo-scope"]);
+                }</set-body>
+            </send-request>
+            <choose>
+                <when condition="@(((IResponse)context.Variables["obo-response"]).StatusCode != 200)">
+                    <!-- Entra error bodies contain error codes only, never tokens. -->
+                    <return-response>
+                        <set-status code="502" reason="OBO exchange failed" />
+                        <set-header name="Content-Type" exists-action="override">
+                            <value>application/json</value>
+                        </set-header>
+                        <set-body>@(((IResponse)context.Variables["obo-response"]).Body.As<string>())</set-body>
+                    </return-response>
+                </when>
+            </choose>
+            <set-variable name="obo-json" value="@(((IResponse)context.Variables["obo-response"]).Body.As<JObject>())" />
+            <set-variable name="obo-token" value="@((string)((JObject)context.Variables["obo-json"])["access_token"])" />
+            <cache-store-value key="@((string)context.Variables["obo-cache-key"])" value="@((string)context.Variables["obo-token"])" duration="@(Math.Max(60, (int)((JObject)context.Variables["obo-json"])["expires_in"] - 120))" />
+        </when>
+    </choose>
+    <set-header name="Authorization" exists-action="override">
+        <value>@("Bearer " + (string)context.Variables["obo-token"])</value>
+    </set-header>
+</fragment>

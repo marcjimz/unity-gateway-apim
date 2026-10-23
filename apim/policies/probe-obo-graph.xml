@@ -1,0 +1,43 @@
+<!-- Feasibility probe: OBO to Microsoft Graph, then read /me. -->
+<policies>
+    <inbound>
+        <base />
+        <include-fragment fragment-id="validate-user" />
+        <set-variable name="obo-scope" value="https://graph.microsoft.com/.default" />
+        <include-fragment fragment-id="obo-exchange" />
+        <include-fragment fragment-id="log-claims" />
+        <send-request mode="new" response-variable-name="me" timeout="20" ignore-error="false">
+            <set-url>https://graph.microsoft.com/v1.0/me?$select=id,userPrincipalName,mail,displayName</set-url>
+            <set-method>GET</set-method>
+            <set-header name="Authorization" exists-action="override">
+                <value>@("Bearer " + (string)context.Variables["obo-token"])</value>
+            </set-header>
+        </send-request>
+        <return-response>
+            <set-status code="200" reason="OK" />
+            <set-header name="Content-Type" exists-action="override">
+                <value>application/json</value>
+            </set-header>
+            <set-body>@{
+                var caller = (Jwt)context.Variables["caller-jwt"];
+                var me = (IResponse)context.Variables["me"];
+                var body = me.Body.As<JObject>();
+                return new JObject(
+                    new JProperty("caller_oid", caller.Claims.GetValueOrDefault("oid", "")),
+                    new JProperty("graph_status", me.StatusCode),
+                    new JProperty("graph_id", body["id"]),
+                    new JProperty("graph_upn", body["userPrincipalName"]),
+                    new JProperty("graph_error", body["error"])).ToString();
+            }</set-body>
+        </return-response>
+    </inbound>
+    <backend>
+        <base />
+    </backend>
+    <outbound>
+        <base />
+    </outbound>
+    <on-error>
+        <base />
+    </on-error>
+</policies>

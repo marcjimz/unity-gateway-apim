@@ -1,0 +1,38 @@
+<!-- Flow #3: user -> APIM -> Databricks managed MCP, acting as the user.
+     APIM validates the user's gateway token, exchanges it (OBO) for an Azure Databricks token for the
+     same user, and forwards the MCP streamable-HTTP request. Only MCP paths are proxied. -->
+<policies>
+    <inbound>
+        <base />
+        <include-fragment fragment-id="validate-user" />
+        <choose>
+            <when condition="@{
+                var path = context.Request.Url.Path.Substring(context.Api.Path.Length + 1);
+                return !(path.StartsWith("/ai-gateway/mcp-services/") || path.StartsWith("/api/2.0/mcp/"));
+            }">
+                <return-response>
+                    <set-status code="404" reason="Not an MCP path" />
+                </return-response>
+            </when>
+        </choose>
+        <set-variable name="obo-scope" value="{{databricks-app-id}}/.default" />
+        <include-fragment fragment-id="obo-exchange" />
+        <include-fragment fragment-id="log-claims" />
+    </inbound>
+    <backend>
+        <forward-request buffer-response="false" />
+    </backend>
+    <outbound>
+        <base />
+    </outbound>
+    <on-error>
+        <base />
+        <choose>
+            <when condition="@(context.Response.StatusCode == 401)">
+                <set-header name="WWW-Authenticate" exists-action="override">
+                    <value>Bearer realm="{{gateway-uri}}", scope="{{gateway-uri}}/mcp.invoke"</value>
+                </set-header>
+            </when>
+        </choose>
+    </on-error>
+</policies>
