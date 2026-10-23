@@ -89,7 +89,7 @@ def user_token(scope: str | None = None, interactive: bool = False, prompt: str 
 class McpClient:
     """Just enough MCP (streamable HTTP, JSON-RPC 2.0) to initialize, list, and call tools."""
 
-    def __init__(self, url: str, token: str, timeout: float = 60.0):
+    def __init__(self, url: str, token: str, timeout: float = 60.0, string_ids: bool = False):
         self.url = url
         self.http = httpx.Client(timeout=timeout)
         self.headers = {
@@ -98,12 +98,13 @@ class McpClient:
             "Content-Type": "application/json",
         }
         self._id = 0
+        self.string_ids = string_ids  # Databricks' MCP proxy (AI Playground) sends UUID string ids
 
     def _post(self, method: str, params: dict | None = None, notify: bool = False) -> httpx.Response:
         body: dict = {"jsonrpc": "2.0", "method": method, "params": params or {}}
         if not notify:
             self._id += 1
-            body["id"] = self._id
+            body["id"] = f"req-{self._id}" if self.string_ids else self._id
         return self.http.post(self.url, headers=self.headers, json=body)
 
     @staticmethod

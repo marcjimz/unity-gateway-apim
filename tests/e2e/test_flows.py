@@ -90,6 +90,16 @@ def test_flow1_graph_tool_runs_as_the_user(out, databricks_token):
     assert claims(databricks_token)["oid"] in text_of(result)
 
 
+def test_flow1_accepts_string_jsonrpc_ids(out, databricks_token):
+    """AI Playground's MCP proxy uses string ids; APIM's MCP server needs graph-mcp.xml to accept them."""
+    url = f"{out['databricks_host']}/ai-gateway/mcp-services/{graph_mcp_name(out)}"
+    mcp = McpClient(url, databricks_token, string_ids=True)
+    assert mcp.initialize().status_code == 200
+    result = mcp.call_tool("get_my_profile", {})
+    assert result["id"] == f"req-{mcp._id}"
+    assert claims(databricks_token)["oid"] in text_of(result)
+
+
 # ---------- Flow #2
 
 def test_flow2_rejects_user_tokens(out, databricks_token):

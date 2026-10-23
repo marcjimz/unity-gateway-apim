@@ -5,12 +5,50 @@
         <base />
         <include-fragment fragment-id="validate-user" />
         <include-fragment fragment-id="log-claims" />
+        <!-- APIM's MCP server rejects JSON-RPC string ids ("Invalid JSON payload"), but JSON-RPC 2.0
+             allows them and the Databricks MCP proxy sends UUIDs. Swap in a numeric id here and
+             restore the original id on the response. One HTTP request carries one JSON-RPC message. -->
+        <set-variable name="rpc-id" value="@{
+            try {
+                var id = context.Request.Body.As<JObject>(preserveContent: true)["id"];
+                return id != null && id.Type == JTokenType.String ? id.ToString(Newtonsoft.Json.Formatting.None) : "";
+            } catch { return ""; }
+        }" />
+        <choose>
+            <when condition="@(((string)context.Variables["rpc-id"]).Length > 0)">
+                <set-body>@{
+                    var body = context.Request.Body.As<JObject>(preserveContent: true);
+                    body["id"] = 1;
+                    return body.ToString(Newtonsoft.Json.Formatting.None);
+                }</set-body>
+            </when>
+        </choose>
     </inbound>
     <backend>
         <base />
     </backend>
     <outbound>
         <base />
+        <choose>
+            <when condition="@(((string)context.Variables.GetValueOrDefault<string>("rpc-id", "")).Length > 0)">
+                <set-body>@{
+                    var original = JToken.Parse((string)context.Variables["rpc-id"]);
+                    var text = context.Response.Body.As<string>();
+                    var isStream = context.Response.Headers.GetValueOrDefault("Content-Type", "").StartsWith("text/event-stream");
+                    var lines = isStream ? text.Split('\n') : new[] { "data: " + text };
+                    for (var i = 0; i < lines.Length; i++) {
+                        var line = lines[i].TrimEnd('\r');
+                        if (!line.StartsWith("data:")) { continue; }
+                        var json = line.Substring(5).Trim();
+                        if (!json.StartsWith("{")) { continue; }
+                        var msg = JObject.Parse(json);
+                        if (msg["id"] != null) { msg["id"] = original; }
+                        lines[i] = (isStream ? "data: " : "") + msg.ToString(Newtonsoft.Json.Formatting.None);
+                    }
+                    return string.Join("\n", lines);
+                }</set-body>
+            </when>
+        </choose>
     </outbound>
     <on-error>
         <base />
