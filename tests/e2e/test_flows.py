@@ -7,6 +7,7 @@ Flow #3  Foundry/CLI login -> APIM -> OBO -> Databricks managed MCP (system.ai.d
 
 import json
 import subprocess
+import time
 
 import httpx
 import pytest
@@ -28,7 +29,7 @@ def app_insights_hops(out: dict, minutes: int = 15) -> list[dict]:
     """identity-hop traces that APIM wrote (claims only)."""
     query = (
         f"traces | where timestamp > ago({minutes}m) and message startswith 'identity-hop' "
-        "| project message | order by timestamp desc | take 50"
+        "| order by timestamp desc | project message | take 50"
     )
     raw = subprocess.run(
         ["az", "monitor", "app-insights", "query", "--app", out["app_insights_app_id"],
@@ -134,6 +135,12 @@ def test_flow2_foundry_agent_uses_databricks_model(out):
     finally:
         openai.conversations.delete(conversation_id=conversation.id)
 
-    hops = [h for h in app_insights_hops(out) if h["api"] == "databricks-models"]
-    assert hops, "no APIM trace for the model call yet (App Insights ingestion can lag a few minutes)"
+    # APIM logs the API display name. App Insights ingestion lags a few minutes, so poll.
+    for _ in range(20):
+        hops = [h for h in app_insights_hops(out) if h["api"] == "Databricks Foundation Models"]
+        if hops:
+            break
+        time.sleep(15)
+    assert hops, "no APIM trace for the model call after 5 minutes"
     assert hops[0]["caller_appid"] == out["foundry_mi_app_id"]
+    assert hops[0]["caller_idtyp"] == "app"

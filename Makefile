@@ -4,7 +4,7 @@ TENANT_ID             = $(shell awk -F'"' '/^tenant_id/{print $$2}' infra/$(TFVA
 DATABRICKS_ACCOUNT_ID = $(shell awk -F'"' '/^databricks_account_id/{print $$2}' infra/$(TFVARS))
 export ARM_TENANT_ID = $(TENANT_ID)
 
-.PHONY: help whoami init plan up databricks login test-feasibility test down
+.PHONY: help whoami init plan up databricks foundry login test-feasibility test down
 
 help:
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-18s %s\n", $$1, $$2}'
@@ -24,6 +24,9 @@ up: init ## Deploy Azure, Entra, APIM, Foundry and the Databricks workspace (wit
 
 databricks: ## Post-provision: Unity Catalog connection + MCP service for the APIM Graph MCP
 	uv run python databricks/setup.py
+
+foundry: ## Post-provision: Foundry prompt agent on a Databricks model via APIM (flow #2)
+	uv run python foundry/setup.py
 
 login: ## Sign in once as the demo user (consent + token cache for the tests)
 	uv run python scripts/login.py

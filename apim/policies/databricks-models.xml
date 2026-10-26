@@ -1,6 +1,6 @@
 <!-- Flow #2: Foundry agent (project managed identity) -> Databricks Foundation Model APIs.
      The caller's Entra token (audience Azure Databricks) is forwarded unchanged, so Databricks
-     sees the Foundry project identity and enforces its CAN_QUERY grant. -->
+     sees the Foundry project identity as its own service principal. -->
 <policies>
     <inbound>
         <base />
@@ -8,12 +8,52 @@
         <include-fragment fragment-id="log-claims" />
         <!-- Foundry may append api-version; Databricks does not use it. -->
         <set-query-parameter name="api-version" exists-action="delete" />
+        <!-- Foundry always sends top_p; Claude models on Databricks reject it ("does not support
+             sampling parameters: top_p"). Drop it for those models. -->
+        <set-body>@{
+            var body = context.Request.Body.As<JObject>(preserveContent: true);
+            if (((string)body["model"] ?? "").StartsWith("databricks-claude")) {
+                body.Remove("top_p");
+            }
+            return body.ToString(Newtonsoft.Json.Formatting.None);
+        }</set-body>
     </inbound>
     <backend>
-        <forward-request buffer-response="false" />
+        <!-- Buffered so the outbound policy can normalize the stream (see below). -->
+        <forward-request buffer-response="true" />
     </backend>
     <outbound>
         <base />
+        <!-- Databricks streams a usage object on every chunk, with null completion/total tokens until the
+             last one and extra fields (cache_*_tokens). OpenAI clients such as Foundry expect usage only
+             once, with integers. Keep usage on the final chunk only, with the standard fields. -->
+        <choose>
+            <when condition="@(context.Response.StatusCode == 200 && context.Response.Headers.GetValueOrDefault("Content-Type", "").StartsWith("text/event-stream"))">
+                <set-body>@{
+                    var lines = context.Response.Body.As<string>().Split('\n');
+                    for (var i = 0; i < lines.Length; i++) {
+                        var line = lines[i].TrimEnd('\r');
+                        if (!line.StartsWith("data:")) { continue; }
+                        var json = line.Substring(5).Trim();
+                        if (!json.StartsWith("{")) { continue; }
+                        var chunk = JObject.Parse(json);
+                        var usage = chunk["usage"] as JObject;
+                        if (usage != null) {
+                            if (usage["completion_tokens"] == null || usage["completion_tokens"].Type == JTokenType.Null) {
+                                chunk.Remove("usage");
+                            } else {
+                                chunk["usage"] = new JObject(
+                                    new JProperty("prompt_tokens", usage["prompt_tokens"]),
+                                    new JProperty("completion_tokens", usage["completion_tokens"]),
+                                    new JProperty("total_tokens", usage["total_tokens"]));
+                            }
+                        }
+                        lines[i] = "data: " + chunk.ToString(Newtonsoft.Json.Formatting.None);
+                    }
+                    return string.Join("\n", lines);
+                }</set-body>
+            </when>
+        </choose>
     </outbound>
     <on-error>
         <base />

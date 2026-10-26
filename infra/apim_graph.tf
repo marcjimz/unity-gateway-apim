@@ -102,17 +102,12 @@ resource "azapi_resource" "graph_mcp_tool" {
   schema_validation_enabled = false
 }
 
-resource "azapi_resource" "graph_mcp_policy" {
-  type      = "Microsoft.ApiManagement/service/apis/policies@2024-05-01"
-  name      = "policy"
-  parent_id = azapi_resource.graph_mcp.id
-
-  body = {
-    properties = {
-      format = "rawxml"
-      value  = file("${path.module}/../apim/policies/graph-mcp.xml")
-    }
-  }
+# azurerm (not azapi) so APIM's XML reformatting doesn't show up as drift; works for MCP-type APIs too.
+resource "azurerm_api_management_api_policy" "graph_mcp" {
+  api_name            = azapi_resource.graph_mcp.name
+  api_management_name = azurerm_api_management.this.name
+  resource_group_name = azurerm_resource_group.this.name
+  xml_content         = file("${path.module}/../apim/policies/graph-mcp.xml")
 
   depends_on = [azurerm_api_management_policy_fragment.this]
 }

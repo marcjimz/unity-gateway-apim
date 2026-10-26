@@ -27,6 +27,7 @@ az login --tenant <tenant-id>
 make whoami            # every credential must show your tenant
 make up                # ~15 min: Azure, Entra, APIM, Foundry, Databricks + catalog on its own storage
 make databricks        # per-user OAuth connection + MCP service for the APIM Graph MCP
+make foundry           # Foundry prompt agent on a Databricks model via APIM
 make login             # sign in once as the demo user and consent
 make test-feasibility  # each auth hop on its own
 make test              # the three flows end to end
@@ -38,8 +39,8 @@ make down
 | # | Sign in to | Do this | Identity at each hop |
 |---|---|---|---|
 | **1** | **Databricks** | Open the agent app in the workspace (Compute → Apps → `uga-agent`) and ask *"Who am I in Microsoft 365?"* On first use, sign in once to the `graph` connection. | You → Databricks app (**you**) → Unity Gateway MCP (**you**, your own OAuth token) → APIM → OBO → Microsoft Graph (**you**) |
-| **2** | **Foundry** | Open the Foundry project → Agents → `uga-databricks-agent` → Playground and send any prompt. | You → Foundry agent → APIM → Databricks model endpoint (**Foundry project managed identity**: a Databricks service principal with `CAN_QUERY`; usage shows up in Databricks system tables) |
-| **3** | **Foundry** | In the same project, open `uga-data-agent` and ask *"Run SELECT current_user()"*. On first use, approve the consent link. | You → Foundry MCP tool (**you**, OAuth passthrough) → APIM → OBO → Databricks managed MCP `system.ai.dbsql` (**you**: your Unity Catalog grants and row filters apply) |
+| **2** | **Foundry** | Open the Foundry project → Agents → `uga-databricks-agent` → Playground and send any prompt. | You → Foundry agent → APIM → Databricks model `databricks-claude-sonnet-5` (**Foundry project managed identity**: a Databricks service principal; without the workspace-access entitlement Databricks returns 403, and its usage is attributed to that principal) |
+| **3** | **CLI** (`make test`) | `tests/e2e/test_flows.py::test_flow3_*` sends `SELECT current_user()` to the Databricks SQL MCP through APIM with your gateway token. *(A Foundry agent using an OAuth passthrough MCP tool is next.)* | You → APIM → OBO → Databricks managed MCP `system.ai.dbsql` (**you**: your Unity Catalog grants apply) |
 
 Flow #2 is the only hop where an identity other than the user's runs the request. That's by design: model capacity is
 governed and tracked per Foundry project, and data and tools always run as the user.

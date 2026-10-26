@@ -7,8 +7,9 @@
         <include-fragment fragment-id="validate-user" />
         <choose>
             <when condition="@{
-                var path = context.Request.Url.Path.Substring(context.Api.Path.Length + 1);
-                return !(path.StartsWith("/ai-gateway/mcp-services/") || path.StartsWith("/api/2.0/mcp/"));
+                // Url.Path is relative to the backend, e.g. /ai-gateway/mcp-services/system.ai.dbsql
+                var rest = context.Request.Url.Path;
+                return !(rest.StartsWith("/ai-gateway/mcp-services/") || rest.StartsWith("/api/2.0/mcp/"));
             }">
                 <return-response>
                     <set-status code="404" reason="Not an MCP path" />
